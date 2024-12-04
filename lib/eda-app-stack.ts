@@ -16,6 +16,7 @@ export class EDAAppStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
 
+    //==== Image related starts here ====
     const imagesBucket = new s3.Bucket(this, "images", {
       removalPolicy: cdk.RemovalPolicy.DESTROY,
       autoDeleteObjects: true,
@@ -27,13 +28,28 @@ export class EDAAppStack extends cdk.Stack {
     receiveMessageWaitTime: cdk.Duration.seconds(10),
   });
 
+  const newImageTopic = new sns.Topic(this, "NewImageTopic", {
+    displayName: "New Image topic",
+  }); 
+
+  //==== Image related ends here ====
+
+
+
+
+
+
+  //==== Mail related starts here ====
+
   const mailerQ = new sqs.Queue(this, "mailer-queue", {
     receiveMessageWaitTime: cdk.Duration.seconds(10),
   });
 
-  const newImageTopic = new sns.Topic(this, "NewImageTopic", {
-    displayName: "New Image topic",
-  }); 
+
+
+  //==== Mail related ends here ====
+
+
 
   const newImageMailEventSource = new events.SqsEventSource(mailerQ, {
     batchSize: 5,
@@ -74,9 +90,7 @@ export class EDAAppStack extends cdk.Stack {
   processImageFn.addEventSource(newImageEventSource);
   mailerFn.addEventSource(newImageMailEventSource);
 
-  newImageTopic.addSubscription(
-    new subs.SqsSubscription(imageProcessQueue)
-  );
+  newImageTopic.addSubscription(new subs.SqsSubscription(imageProcessQueue));
 
   newImageTopic.addSubscription(new subs.SqsSubscription(mailerQ));
 
