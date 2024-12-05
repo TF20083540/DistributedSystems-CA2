@@ -1,7 +1,7 @@
-EDAStack.bucketName = edastack-images9bf4dcd5-yhpypmw3zqrg
+EDAStack.bucketName = edastack-images9bf4dcd5-hyibcuqu2pap
 
 commands: 
-upload image = aws s3 cp ./images/sunflower.jpeg  s3://your_bucket_name/image1.jpeg
+upload image = aws s3 cp ./images/sunflower.jpeg  s3://edastack-images9bf4dcd5-hyibcuqu2pap/image1.jpeg
 send message to db
 
 

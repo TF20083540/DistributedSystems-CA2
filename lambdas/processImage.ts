@@ -6,6 +6,7 @@ import {
   GetObjectCommandInput,
   S3Client,
   PutObjectCommand,
+  DeleteObjectCommand
 } from "@aws-sdk/client-s3";
 
 const s3 = new S3Client();
@@ -23,6 +24,24 @@ export const handler: SQSHandler = async (event) => {
         const srcBucket = s3e.bucket.name;
         // Object key may have spaces or unicode non-ASCII characters.
         const srcKey = decodeURIComponent(s3e.object.key.replace(/\+/g, " "));
+
+
+
+        // Validate file type
+        const validImageTypes = ['.jpeg', '.jpg', '.png'];
+        const fileExtension = srcKey.slice((Math.max(0, srcKey.lastIndexOf(".")) || Infinity) + 1).toLowerCase();
+
+        if (!validImageTypes.includes(`.${fileExtension}`)) {
+          console.error(`Invalid file type for ${srcKey}. Deleting the file.`);
+          try {
+            await s3.send(new DeleteObjectCommand({ Bucket: srcBucket, Key: srcKey }));
+            console.log(`Successfully deleted invalid file: ${srcKey}`);
+          } catch (error) {
+            console.error(`Error deleting file ${srcKey}:`, error);
+          }
+          return; // Skip further processing for this file
+        }
+
         let origimage = null;
         try {
           // Download the image from the S3 source bucket.
@@ -32,6 +51,7 @@ export const handler: SQSHandler = async (event) => {
           };
           origimage = await s3.send(new GetObjectCommand(params));
           // Process the image ......
+
         } catch (error) {
           console.log(error);
         }

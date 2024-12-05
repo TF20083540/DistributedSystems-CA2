@@ -96,6 +96,7 @@ export class EDAAppStack extends cdk.Stack {
 
   // Permissions
   imagesBucket.grantRead(processImageFn);
+  imagesBucket.grantDelete(processImageFn); //Allow the processImage function to delete invalid imagetypes.
 
   mailerFn.addToRolePolicy(
     new iam.PolicyStatement({
