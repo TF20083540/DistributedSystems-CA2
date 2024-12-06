@@ -35,27 +35,6 @@ export class EDAAppStack extends cdk.Stack {
   //==== Image related ends here ====
 
 
-
-
-
-
-  //==== Mail related starts here ====
-
-  const mailerQ = new sqs.Queue(this, "mailer-queue", {
-    receiveMessageWaitTime: cdk.Duration.seconds(10),
-  });
-
-
-
-  //==== Mail related ends here ====
-
-
-
-  const newImageMailEventSource = new events.SqsEventSource(mailerQ, {
-    batchSize: 5,
-    maxBatchingWindow: cdk.Duration.seconds(5),
-  }); 
-
   // Lambda functions
   const processImageFn = new lambdanode.NodejsFunction(
     this,
@@ -75,11 +54,26 @@ export class EDAAppStack extends cdk.Stack {
     entry: `${__dirname}/../lambdas/mailer.ts`,
   });
 
+                              //New Lambda - Reject Mailer
+  const rejectMailerFn = new lambdanode.NodejsFunction(this, "rejectmailer-function", {
+    runtime: lambda.Runtime.NODEJS_16_X,
+    memorySize: 1024,
+    timeout:cdk.Duration.seconds(3),
+    entry: `${__dirname}/../lambdas/rejectMailer.ts`
+  })
+
+
   // S3 --> SQS
   imagesBucket.addEventNotification(
     s3.EventType.OBJECT_CREATED,
     new s3n.SnsDestination(newImageTopic)  // Changed
 );
+
+  imagesBucket.addEventNotification(
+    s3.EventType.OBJECT_REMOVED,
+    new s3n.LambdaDestination(rejectMailerFn)  //Triggers rejectMailerFn on object deletion
+  );
+
 
  // SQS --> Lambda
   const newImageEventSource = new events.SqsEventSource(imageProcessQueue, {
@@ -87,17 +81,33 @@ export class EDAAppStack extends cdk.Stack {
     maxBatchingWindow: cdk.Duration.seconds(5),
   });
 
+  const mailerQ = new sqs.Queue(this, "mailer-queue", {
+    receiveMessageWaitTime: cdk.Duration.seconds(10),
+  });
+
+  const newImageMailEventSource = new events.SqsEventSource(mailerQ, {
+    batchSize: 5,
+    maxBatchingWindow: cdk.Duration.seconds(5),
+  }); 
+
+
+
+  //Event Sources
   processImageFn.addEventSource(newImageEventSource);
   mailerFn.addEventSource(newImageMailEventSource);
 
+  //Subscription triggers
   newImageTopic.addSubscription(new subs.SqsSubscription(imageProcessQueue));
-
   newImageTopic.addSubscription(new subs.SqsSubscription(mailerQ));
+
 
   // Permissions
   imagesBucket.grantRead(processImageFn);
   imagesBucket.grantDelete(processImageFn); //Allow the processImage function to delete invalid imagetypes.
+  imagesBucket.grantRead(rejectMailerFn); //Allows the rejectMailer function to mail when an object has been deleted.
 
+
+  //Role Policies
   mailerFn.addToRolePolicy(
     new iam.PolicyStatement({
       effect: iam.Effect.ALLOW,
@@ -109,6 +119,19 @@ export class EDAAppStack extends cdk.Stack {
       resources: ["*"],
     })
   );
+
+  rejectMailerFn.addToRolePolicy(
+    new iam.PolicyStatement({
+      effect: iam.Effect.ALLOW,
+      actions: [
+        "ses:SendEmail",
+        "ses:SendRawEmail",
+        "ses:SendTemplatedEmail",
+      ],
+      resources: ["*"],
+    })
+  );
+
 
   // Output
   new cdk.CfnOutput(this, "bucketName", {
