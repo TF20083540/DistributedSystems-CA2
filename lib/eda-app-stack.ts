@@ -8,6 +8,9 @@ import * as sqs from "aws-cdk-lib/aws-sqs";
 import * as sns from "aws-cdk-lib/aws-sns";
 import * as subs from "aws-cdk-lib/aws-sns-subscriptions";
 import * as iam from "aws-cdk-lib/aws-iam";
+import * as dynamodb from "aws-cdk-lib/aws-dynamodb";
+import * as rds from "aws-cdk-lib/aws-rds"; //New
+import * as ec2 from "aws-cdk-lib/aws-ec2"; //New
 
 import { Construct } from "constructs";
 // import * as sqs from 'aws-cdk-lib/aws-sqs';
@@ -16,7 +19,18 @@ export class EDAAppStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
 
-    //==== Image related starts here ====
+    //Creates a table for my image names and descriptions
+    const imagesTable = new dynamodb.Table(this, "ImagesTable", {
+      partitionKey: { name: "filename", type: dynamodb.AttributeType.STRING },
+      removalPolicy: cdk.RemovalPolicy.DESTROY, //Change to RETAIN for production
+    });
+
+
+
+
+
+
+    //Creates my bucket
     const imagesBucket = new s3.Bucket(this, "images", {
       removalPolicy: cdk.RemovalPolicy.DESTROY,
       autoDeleteObjects: true,
@@ -32,7 +46,7 @@ export class EDAAppStack extends cdk.Stack {
     displayName: "New Image topic",
   }); 
 
-  //==== Image related ends here ====
+
 
 
   // Lambda functions
@@ -62,16 +76,30 @@ export class EDAAppStack extends cdk.Stack {
     entry: `${__dirname}/../lambdas/rejectMailer.ts`
   })
 
+  const addImageToTableFn = new lambdanode.NodejsFunction(this, "AddImageToTableFn", {
+    runtime: lambda.Runtime.NODEJS_18_X,
+    entry: `${__dirname}/../lambdas/addToTable.ts`,
+    environment: {
+      TABLE_NAME: imagesTable.tableName,
+    },
+  });
+  
+
 
   // S3 --> SQS
-  imagesBucket.addEventNotification(
-    s3.EventType.OBJECT_CREATED,
-    new s3n.SnsDestination(newImageTopic)  // Changed
-);
+//  imagesBucket.addEventNotification( //Didn't realise the bones for this was already there.... Had to remove anyways due to Trigger conflict.
+//    s3.EventType.OBJECT_CREATED,
+//    new s3n.SnsDestination(newImageTopic)  // Changed
+//);
 
   imagesBucket.addEventNotification(
     s3.EventType.OBJECT_REMOVED,
     new s3n.LambdaDestination(rejectMailerFn)  //Triggers rejectMailerFn on object deletion
+  );
+
+  imagesBucket.addEventNotification(
+    s3.EventType.OBJECT_CREATED,
+    new s3n.LambdaDestination(addImageToTableFn) // Triggers addImageFn on object creation
   );
 
 
@@ -91,6 +119,11 @@ export class EDAAppStack extends cdk.Stack {
   }); 
 
 
+  
+
+
+
+
 
   //Event Sources
   processImageFn.addEventSource(newImageEventSource);
@@ -105,7 +138,8 @@ export class EDAAppStack extends cdk.Stack {
   imagesBucket.grantRead(processImageFn);
   imagesBucket.grantDelete(processImageFn); //Allow the processImage function to delete invalid imagetypes.
   imagesBucket.grantRead(rejectMailerFn); //Allows the rejectMailer function to mail when an object has been deleted.
-
+  imagesTable.grantWriteData(addImageToTableFn); //Allows write to the imageTable
+  imagesTable.grantReadData(addImageToTableFn); //Allows reading of the imageTable
 
   //Role Policies
   mailerFn.addToRolePolicy(

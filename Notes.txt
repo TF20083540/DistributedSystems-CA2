@@ -1,15 +1,13 @@
-EDAStack.bucketName = edastack-images9bf4dcd5-0e3hphgwd9cz
+EDAStack.bucketName = edastack-images9bf4dcd5-r5vy8rbvgffa
 
 commands: 
-upload image = aws s3 cp ./images/sunflower.jpeg  s3://edastack-images9bf4dcd5-0e3hphgwd9cz/image1.jpeg
+upload image = aws s3 cp ./images/sunflower.jpeg  s3://edastack-images9bf4dcd5-r5vy8rbvgffa/image1.jpeg
 send message to db
 
 
 
 Note:
-SQS = Currently I need to import the bad batch queue, and ensure that the verification works correctly.
-Then I need to get rid of the test data, and ensure that the email is sent depending on what happened (bad file type, bad upload, failure to apply to the database, etc etc).
-
+SQS = Done
 SNS = Need to check how to upload dscription at the same time as the image, but have a general understanding for db manipulation.
 
 SQL = Need to create an SQL database for holding description and link to bucket/image.
