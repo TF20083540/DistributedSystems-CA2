@@ -22,7 +22,6 @@ export const handler: SQSHandler = async (event) => {
       for (const messageRecord of snsMessage.Records) {
         const s3e = messageRecord.s3;
         const srcBucket = s3e.bucket.name;
-        // Object key may have spaces or unicode non-ASCII characters.
         const srcKey = decodeURIComponent(s3e.object.key.replace(/\+/g, " "));
 
 
@@ -42,7 +41,7 @@ export const handler: SQSHandler = async (event) => {
           return; // Skip further processing for this file
         }
 
-        let origimage = null;
+        let origimage = null; //Is this a hint towards lambda chaining?
         try {
           // Download the image from the S3 source bucket.
           const params: GetObjectCommandInput = {

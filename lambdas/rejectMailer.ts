@@ -5,6 +5,9 @@ import {
   SendEmailCommand,
   SendEmailCommandInput,
 } from "@aws-sdk/client-ses";
+//import { DynamoDB } from "aws-sdk";
+import { Lambda} from "@aws-sdk/client-lambda"; //Import the Lambda client
+
 
 if (!SES_EMAIL_TO || !SES_EMAIL_FROM || !SES_REGION) {
   throw new Error(
@@ -18,24 +21,63 @@ type ContactDetails = {
   message: string;
 };
 
-const client = new SESClient({ region: SES_REGION});
+const client = new SESClient({ region: SES_REGION });
+//const dynamoDb = new DynamoDB.DocumentClient();
+const lambdaClient = new Lambda({ region: SES_REGION });
 
-export const handler: SQSHandler = async (event: any) => {
+
+export const handler: SQSHandler = async (event: any): Promise<void> => {
+  const functionArn = process.env.REMOVEIMAGEFROMTABLEFN_ARN; //This gets the function ARN from env as set in eda-app-stack.ts
+
+  console.log('Function ARN:', functionArn); //Log the ARN for debugging
+
   console.log("Event ", JSON.stringify(event));
+  for (const record of event.Records) {
+    const s3 = record.s3;
+    const filename = decodeURIComponent(s3.object.key.replace(/\+/g, " "));
 
-  try {
-    const { name, email, message }: ContactDetails = {
-      name: "The Photo Album",
-      email: SES_EMAIL_FROM,
-      message: `The image you uploaded was rejected. Reason: Incorrect file format. Please ensure that your file is a .jpeg, .jpg, or .png filetype.`,
+    //Send email about file deletion/rejection.
+    try {
+      const { name, email, message }: ContactDetails = {
+        name: "The Photo Album",
+        email: SES_EMAIL_FROM,
+        message: `The image you uploaded was rejected or deleted.`,
+      };
+      const params = sendEmailParams({ name, email, message });
+      await client.send(new SendEmailCommand(params));
+
+      //Call another lambda
+      const lambdaParams = {
+        FunctionName: functionArn,
+        InvocationType: 'RequestResponse' as const,
+        Payload: JSON.stringify(event),
+      };
+
+      const lambdaResponse = await lambdaClient.invoke(lambdaParams);
+      console.log('RemoveImageFromTableFn response:', lambdaResponse);
+
+
+    } catch (error: unknown) {
+      console.log("ERROR sending email: ", error);
+    }
+
+/*     console.log("DynamoDB Table Name: ", process.env.TABLE_NAME); //Debugging console.
+
+    //Delete image reference from DynamoDB table
+    const deleteParams = {
+      TableName: process.env.TABLE_NAME!,
+      Key: {
+        filename: filename,
+      },
     };
-    const params = sendEmailParams({ name, email, message });
-    await client.send(new SendEmailCommand(params));
-  } catch (error: unknown) {
-    console.log("ERROR is: ", error);
-    // return;
-  }
 
+    try {
+      const result = await dynamoDb.delete(deleteParams).promise();
+      console.log(`Image reference deleted successfully from the db: ${filename}`, result);
+    } catch (error) {
+      console.error("Error deleting image reference in the db:", error);
+    } */
+  }
 };
 
 function sendEmailParams({ name, email, message }: ContactDetails) {
